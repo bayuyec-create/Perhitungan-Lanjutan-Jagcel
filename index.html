@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jago Excel - Tutorial Interaktif</title>
+    
+    <!-- Import Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Import Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Custom Styles -->
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeIn {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+        /* Custom scrollbar for better look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800">
+
+    <div id="app" class="min-h-screen flex flex-col md:flex-row">
+        <!-- App will be rendered here via JavaScript -->
+    </div>
+
+    <script>
+        // --- DATA & STATE ---
+
+        const sampleData = [
+            { row: 2, date: '01/01/2024', product: 'Laptop', region: 'Barat', sales: 5000000 },
+            { row: 3, date: '02/01/2024', product: 'Mouse', region: 'Timur', sales: 150000 },
+            { row: 4, date: '03/01/2024', product: 'Laptop', region: 'Timur', sales: 5200000 },
+            { row: 5, date: '04/01/2024', product: 'Keyboard', region: 'Barat', sales: 300000 },
+            { row: 6, date: '05/01/2024', product: 'Mouse', region: 'Barat', sales: 150000 },
+            { row: 7, date: '06/01/2024', product: 'Laptop', region: 'Utara', sales: 5000000 },
+        ];
+
+        const modules = [
+            { id: 'intro', title: 'Pengenalan', icon: 'book-open' },
+            { id: 'countif', title: 'COUNTIF', icon: 'calculator' },
+            { id: 'countifs', title: 'COUNTIFS', icon: 'calculator' },
+            { id: 'sumif', title: 'SUMIF', icon: 'calculator' },
+            { id: 'sumifs', title: 'SUMIFS', icon: 'calculator' },
+            { id: 'averageif', title: 'AVERAGEIF', icon: 'calculator' },
+            { id: 'averageifs', title: 'AVERAGEIFS', icon: 'calculator' },
+            { id: 'summary', title: 'Rangkuman', icon: 'check-circle' },
+        ];
+
+        // State object to mimic React useState
+        const state = {
+            activeTab: 'intro',
+            userFormula: '',
+            feedback: null, // { type: 'success'|'error', msg: '', result: '' }
+            isSidebarOpen: false
+        };
+
+        // --- LOGIC FUNCTIONS ---
+
+        function calculateResult(tab) {
+            switch (tab) {
+                case 'countif': return sampleData.filter(d => d.product === 'Laptop').length;
+                case 'countifs': return sampleData.filter(d => d.product === 'Mouse' && d.region === 'Barat').length;
+                case 'sumif': return sampleData.filter(d => d.product === 'Laptop').reduce((acc, curr) => acc + curr.sales, 0);
+                case 'sumifs': return sampleData.filter(d => d.product === 'Laptop' && d.region === 'Timur').reduce((acc, curr) => acc + curr.sales, 0);
+                case 'averageif': 
+                    const laptops = sampleData.filter(d => d.product === 'Laptop');
+                    const total = laptops.reduce((acc, curr) => acc + curr.sales, 0);
+                    return total / laptops.length;
+                case 'averageifs':
+                    const target = sampleData.filter(d => d.product === 'Laptop' && d.region === 'Timur');
+                    const totalTarget = target.reduce((acc, curr) => acc + curr.sales, 0);
+                    return totalTarget / target.length;
+                default: return 0;
+            }
+        }
+
+        function formatResult(val, tab) {
+            if (tab.startsWith('count')) return val;
+            return `Rp ${val.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+        }
+
+        // --- GLOBAL APP METHODS ---
+
+        const app = {
+            handleTabChange: (tabId) => {
+                state.activeTab = tabId;
+                state.feedback = null;
+                state.isSidebarOpen = false;
+
+                // Set preset formulas
+                switch (tabId) {
+                    case 'countif': state.userFormula = '=COUNTIF(B2:B7;"Laptop")'; break;
+                    case 'countifs': state.userFormula = '=COUNTIFS(B2:B7;"Mouse";C2:C7;"Barat")'; break;
+                    case 'sumif': state.userFormula = '=SUMIF(B2:B7;"Laptop";D2:D7)'; break;
+                    case 'sumifs': state.userFormula = '=SUMIFS(D2:D7;B2:B7;"Laptop";C2:C7;"Timur")'; break;
+                    case 'averageif': state.userFormula = '=AVERAGEIF(B2:B7;"Laptop";D2:D7)'; break;
+                    case 'averageifs': state.userFormula = '=AVERAGEIFS(D2:D7;B2:B7;"Laptop";C2:C7;"Timur")'; break;
+                    default: state.userFormula = '';
+                }
+                renderApp();
+            },
+
+            toggleSidebar: () => {
+                state.isSidebarOpen = !state.isSidebarOpen;
+                renderApp();
+            },
+
+            handleInput: (value) => {
+                state.userFormula = value;
+                state.feedback = null; // Clear feedback on type, but don't full re-render to lose focus
+                // We update the DOM manually for feedback clearing to avoid input focus loss
+                const feedbackEl = document.getElementById('feedback-area');
+                if (feedbackEl) feedbackEl.innerHTML = '';
+            },
+
+            checkAnswer: (correctPatterns) => {
+                // 1. Bersihkan input user: Hapus spasi, lowercase, ubah kutip satu (') jadi kutip dua (")
+                // Ini penting karena user Excel biasanya mengetik dengan kutip dua (")
+                const normalizedInput = state.userFormula
+                    .replace(/\s/g, '')
+                    .toLowerCase()
+                    .replace(/'/g, '"');
+                
+                // 2. Bersihkan pola kunci (patterns): 
+                // Karena passing data lewat atribut HTML mengubah " jadi ', kita harus kembalikan jadi "
+                // agar bisa dicocokkan dengan input user.
+                const normalizedPatterns = correctPatterns.map(p => 
+                    p.replace(/\s/g, '').toLowerCase().replace(/'/g, '"')
+                );
+                
+                const isCorrect = normalizedPatterns.some(pattern => normalizedInput.includes(pattern));
+
+                if (isCorrect) {
+                    const resultVal = calculateResult(state.activeTab);
+                    const formattedResult = formatResult(resultVal, state.activeTab);
+                    state.feedback = {
+                        type: 'success',
+                        msg: 'Luar Biasa! Rumus benar.',
+                        result: formattedResult
+                    };
+                } else {
+                    state.feedback = {
+                        type: 'error',
+                        msg: 'Hmm, sepertinya masih kurang tepat. Cek rentang sel atau tanda bacanya.'
+                    };
+                }
+                renderApp();
+            }
+        };
+
+        // --- RENDER FUNCTIONS (HTML GENERATORS) ---
+
+        function renderSpreadsheet() {
+            const rows = sampleData.map(item => `
+                <tr class="hover:bg-blue-50">
+                    <td class="px-2 py-2 border text-center font-bold text-gray-400 bg-gray-50">${item.row}</td>
+                    <td class="px-4 py-2 border">${item.date}</td>
+                    <td class="px-4 py-2 border font-medium text-blue-600">${item.product}</td>
+                    <td class="px-4 py-2 border text-purple-600">${item.region}</td>
+                    <td class="px-4 py-2 border text-right font-mono text-green-700">
+                        Rp ${item.sales.toLocaleString('id-ID')}
+                    </td>
+                </tr>
+            `).join('');
+
+            return `
+                <div class="overflow-x-auto bg-white rounded-lg border border-gray-300 shadow-sm mb-6">
+                    <table class="min-w-full text-sm text-left">
+                        <thead class="bg-gray-100 text-gray-600 font-bold uppercase text-xs">
+                            <tr>
+                                <th class="px-4 py-2 border w-10 text-center bg-gray-200"></th>
+                                <th class="px-4 py-2 border w-24">A (Tgl)</th>
+                                <th class="px-4 py-2 border w-32">B (Produk)</th>
+                                <th class="px-4 py-2 border w-24">C (Wilayah)</th>
+                                <th class="px-4 py-2 border w-32 text-right">D (Penjualan)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            ${rows}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function renderFeedback() {
+            if (!state.feedback) return '';
+            const isSuccess = state.feedback.type === 'success';
+            const colorClass = isSuccess ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+            const icon = isSuccess ? 'check-circle' : 'x-circle';
+            
+            let resultHtml = '';
+            if (state.feedback.result) {
+                resultHtml = `
+                    <div class="ml-6 mt-1 text-green-900 bg-white/50 p-2 rounded inline-block w-fit">
+                        Hasil: <span class="font-mono text-lg font-bold">${state.feedback.result}</span>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="mt-3 p-3 rounded text-sm flex flex-col gap-1 ${colorClass}">
+                    <div class="flex items-center gap-2 font-bold">
+                        <i data-lucide="${icon}" width="16" height="16"></i>
+                        ${state.feedback.msg}
+                    </div>
+                    ${resultHtml}
+                </div>
+            `;
+        }
+
+        function renderChallenge(number, question, patterns, nextTab, nextLabel) {
+            // We serialize patterns array to string to pass it to the function
+            const patternsStr = JSON.stringify(patterns).replace(/"/g, "'"); 
+            
+            // Fix: Escape double quotes to ensure input value renders correctly
+            const safeFormula = state.userFormula.replace(/"/g, '&quot;');
+            
+            return `
+                <div class="bg-white border border-gray-200 p-6 rounded-xl shadow-sm">
+                    <h3 class="font-bold text-gray-800 mb-2 flex items-center gap-2">
+                        <i data-lucide="help-circle" class="text-blue-500" width="18"></i> Tantangan #${number}
+                    </h3>
+                    <p class="mb-4 text-sm text-gray-600">${question}</p>
+                    
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input 
+                            type="text" 
+                            id="formulaInput"
+                            class="flex-1 border p-2 rounded font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none text-gray-700 font-medium"
+                            value="${safeFormula}"
+                            oninput="app.handleInput(this.value)"
+                        />
+                        <button 
+                            onclick="app.checkAnswer(${patternsStr})"
+                            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                        >
+                            Cek Rumus
+                        </button>
+                    </div>
+                    <div id="feedback-area">
+                        ${renderFeedback()}
+                    </div>
+                </div>
+                <button 
+                    onclick="app.handleTabChange('${nextTab}')"
+                    class="w-full mt-4 py-3 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 flex justify-center items-center gap-2 transition-colors"
+                >
+                    ${nextLabel} <i data-lucide="chevron-right" width="16"></i>
+                </button>
+            `;
+        }
+
+        function renderContent() {
+            switch (state.activeTab) {
+                case 'intro':
+                    return `
+                        <div class="space-y-6 animate-fadeIn">
+                            <h2 class="text-3xl font-bold text-gray-800">Selamat Datang di Kelas Excel!</h2>
+                            <p class="text-gray-600 leading-relaxed">
+                                Halo! Kita akan membahas enam fungsi yang sering 
+                                tertukar namun sangat powerful untuk analisis data: 
+                                <span class="font-bold text-blue-600"> COUNT, SUM,</span> dan 
+                                <span class="font-bold text-green-600"> AVERAGE</span> dengan kriteria tertentu.
+                            </p>
+                            
+                            <div class="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
+                                <h3 class="font-bold text-blue-800 mb-2">Konsep Dasar:</h3>
+                                <ul class="list-disc list-inside text-blue-700 space-y-2">
+                                    <li><strong>IF (Tunggal):</strong> Hanya satu syarat (Misal: Hanya "Laptop").</li>
+                                    <li><strong>IFS (Jamak):</strong> Lebih dari satu syarat (Misal: "Laptop" DAN di wilayah "Barat").</li>
+                                    <li><strong>COUNT:</strong> Menghitung BERAPA BANYAK datanya (Frekuensi).</li>
+                                    <li><strong>SUM:</strong> Menjumlahkan NILAI angkanya (Total).</li>
+                                    <li><strong>AVERAGE:</strong> Menghitung RATA-RATA nilainya.</li>
+                                </ul>
+                            </div>
+                            
+                            <button 
+                                onclick="app.handleTabChange('countif')"
+                                class="mt-4 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
+                            >
+                                Mulai Belajar <i data-lucide="chevron-right" width="20"></i>
+                            </button>
+                        </div>
+                    `;
+
+                case 'countif':
+                    return `
+                        <div class="space-y-6 animate-fadeIn">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 bg-yellow-100 text-yellow-700 rounded-lg"><i data-lucide="calculator"></i></span>
+                                <h2 class="text-2xl font-bold text-gray-800">COUNTIF (Hitung Jika...)</h2>
+                            </div>
+                            <p class="text-gray-600">Digunakan untuk menghitung <strong>banyaknya data</strong> yang memenuhi <strong>satu kriteria</strong> saja.</p>
+                            <div class="bg-gray-800 text-white p-4 rounded-lg font-mono text-sm overflow-x-auto">
+                                =COUNTIF(<span class="text-yellow-400">range</span>; <span class="text-green-400">criteria</span>)
+                            </div>
+                            <ul class="text-sm text-gray-600 space-y-1 ml-4 list-disc">
+                                <li><span class="font-mono bg-gray-200 px-1 rounded text-yellow-700">range</span>: Area sel yang mau dicek.</li>
+                                <li><span class="font-mono bg-gray-200 px-1 rounded text-green-700">criteria</span>: Syaratnya apa (misal "Laptop").</li>
+                            </ul>
+                            ${renderSpreadsheet()}
+                            ${renderChallenge(1, 
+                                'Berapa kali transaksi penjualan <strong>"Laptop"</strong> terjadi? (Lihat kolom B)', 
+                                ['=countif(b2:b7;"laptop")', '=countif(b2:b7,"laptop")'],
+                                'countifs', 'Lanjut ke COUNTIFS'
+                            )}
+                        </div>
+                    `;
+
+                case 'countifs':
+                    return `
+                        <div class="space-y-6 animate-fadeIn">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 bg-orange-100 text-orange-700 rounded-lg"><i data-lucide="calculator"></i></span>
+                                <h2 class="text-2xl font-bold text-gray-800">COUNTIFS (Hitung Jika Jamak...)</h2>
+                            </div>
+                            <p class="text-gray-600">Ada huruf 'S' di belakangnya artinya <em>Plural</em> (Jamak). Gunakan ini jika syaratnya <strong>lebih dari satu</strong>.</p>
+                            <div class="bg-gray-800 text-white p-4 rounded-lg font-mono text-sm overflow-x-auto">
+                                =COUNTIFS(<span class="text-yellow-400">criteria_range1</span>; <span class="text-green-400">criteria1</span>; [range2]; [criteria2]; ...)
+                            </div>
+                            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 text-sm text-yellow-800">
+                                <strong>Tips Instruktur:</strong> Polanya selalu berpasangan! (Area 1, Syarat 1, Area 2, Syarat 2, dst).
+                            </div>
+                            ${renderSpreadsheet()}
+                            ${renderChallenge(2, 
+                                'Hitung transaksi <strong>"Mouse"</strong> yang terjadi di wilayah <strong>"Barat"</strong>.', 
+                                ['=countifs(b2:b7;"mouse";c2:c7;"barat")', '=countifs(b2:b7,"mouse",c2:c7,"barat")', '=countifs(c2:c7;"barat";b2:b7;"mouse")'],
+                                'sumif', 'Lanjut ke SUMIF'
+                            )}
+                        </div>
+                    `;
+
+                case 'sumif':
+                    return `
+                        <div class="space-y-6 animate-fadeIn">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 bg-green-100 text-green-700 rounded-lg"><i data-lucide="calculator"></i></span>
+                                <h2 class="text-2xl font-bold text-gray-800">SUMIF (Jumlahkan Jika...)</h2>
+                            </div>
+                            <p class="text-gray-600">Menjumlahkan <strong>nilai angka</strong> (biasanya Uang atau Qty) berdasarkan <strong>satu syarat</strong>.</p>
+                            <div class="bg-gray-800 text-white p-4 rounded-lg font-mono text-sm overflow-x-auto">
+                                =SUMIF(<span class="text-yellow-400">range</span>; <span class="text-green-400">criteria</span>; <span class="text-blue-400">[sum_range]</span>)
+                            </div>
+                            <div class="bg-red-50 border-l-4 border-red-400 p-3 text-sm text-red-800">
+                                <strong>Peringatan Penting:</strong> Di SUMIF (dan AVERAGEIF), kolom yang mau dihitung (<span class="font-mono">sum_range</span>) letaknya di <strong>AKHIR</strong>.
+                            </div>
+                            ${renderSpreadsheet()}
+                            ${renderChallenge(3, 
+                                'Hitung <strong>Total Uang Penjualan</strong> (Kolom D) khusus untuk produk <strong>"Laptop"</strong>.', 
+                                ['=sumif(b2:b7;"laptop";d2:d7)', '=sumif(b2:b7,"laptop",d2:d7)'],
+                                'sumifs', 'Lanjut ke SUMIFS'
+                            )}
+                        </div>
+                    `;
+
+                case 'sumifs':
+                    return `
+                        <div class="space-y-6 animate-fadeIn">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 bg-purple-100 text-purple-700 rounded-lg"><i data-lucide="calculator"></i></span>
+                                <h2 class="text-2xl font-bold text-gray-800">SUMIFS (Jumlahkan Jika Jamak...)</h2>
+                            </div>
+                            <p class="text-gray-600">Menjumlahkan nilai dengan <strong>banyak syarat</strong>. Ini rumus yang paling sering membuat orang bingung karena urutannya terbalik dari SUMIF.</p>
+                            <div class="bg-gray-800 text-white p-4 rounded-lg font-mono text-sm overflow-x-auto">
+                                =SUMIFS(<span class="text-blue-400">sum_range</span>; <span class="text-yellow-400">criteria_range1</span>; <span class="text-green-400">criteria1</span>; ...)
+                            </div>
+                            <div class="bg-purple-50 border-l-4 border-purple-400 p-3 text-sm text-purple-800">
+                                <strong>Perbedaan Kunci:</strong> Di SUMIFS (dan AVERAGEIFS), kolom yang mau dihitung (<span class="font-mono">sum_range</span>) WAJIB diletakkan di <strong>AWAL (DEPAN)</strong>.
+                            </div>
+                            ${renderSpreadsheet()}
+                            ${renderChallenge(4, 
+                                'Hitung total penjualan (Kolom D) untuk <strong>"Laptop"</strong> di wilayah <strong>"Timur"</strong>.', 
+                                ['=sumifs(d2:d7;b2:b7;"laptop";c2:c7;"timur")', '=sumifs(d2:d7,b2:b7,"laptop",c2:c7,"timur")', '=sumifs(d2:d7;c2:c7;"timur";b2:b7;"laptop")'],
+                                'averageif', 'Lanjut ke AVERAGEIF'
+                            )}
+                        </div>
+                    `;
+
+                case 'averageif':
+                    return `
+                        <div class="space-y-6 animate-fadeIn">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 bg-indigo-100 text-indigo-700 rounded-lg"><i data-lucide="calculator"></i></span>
+                                <h2 class="text-2xl font-bold text-gray-800">AVERAGEIF (Rata-rata Jika...)</h2>
+                            </div>
+                            <p class="text-gray-600">Menghitung <strong>rata-rata (mean)</strong> berdasarkan satu kriteria. Polanya <strong>SAMA PERSIS</strong> dengan SUMIF.</p>
+                            <div class="bg-gray-800 text-white p-4 rounded-lg font-mono text-sm overflow-x-auto">
+                                =AVERAGEIF(<span class="text-yellow-400">range</span>; <span class="text-green-400">criteria</span>; <span class="text-blue-400">[average_range]</span>)
+                            </div>
+                            <div class="bg-indigo-50 border-l-4 border-indigo-400 p-3 text-sm text-indigo-800">
+                                <strong>Tips Mengingat:</strong> Karena "IF" nya tunggal, kolom angka yang mau dirata-rata (<span class="font-mono">average_range</span>) ada di <strong>BELAKANG</strong>.
+                            </div>
+                            ${renderSpreadsheet()}
+                            ${renderChallenge(5, 
+                                'Berapa <strong>rata-rata nilai penjualan</strong> (Kolom D) untuk produk <strong>"Laptop"</strong>?', 
+                                ['=averageif(b2:b7;"laptop";d2:d7)', '=averageif(b2:b7,"laptop",d2:d7)'],
+                                'averageifs', 'Lanjut ke AVERAGEIFS'
+                            )}
+                        </div>
+                    `;
+
+                case 'averageifs':
+                    return `
+                        <div class="space-y-6 animate-fadeIn">
+                            <div class="flex items-center gap-3">
+                                <span class="p-2 bg-pink-100 text-pink-700 rounded-lg"><i data-lucide="calculator"></i></span>
+                                <h2 class="text-2xl font-bold text-gray-800">AVERAGEIFS (Rata-rata Jika Jamak...)</h2>
+                            </div>
+                            <p class="text-gray-600">Menghitung rata-rata dengan <strong>banyak syarat</strong>. Polanya <strong>SAMA PERSIS</strong> dengan SUMIFS.</p>
+                            <div class="bg-gray-800 text-white p-4 rounded-lg font-mono text-sm overflow-x-auto">
+                                =AVERAGEIFS(<span class="text-blue-400">average_range</span>; <span class="text-yellow-400">criteria_range1</span>; <span class="text-green-400">criteria1</span>; ...)
+                            </div>
+                            <div class="bg-pink-50 border-l-4 border-pink-400 p-3 text-sm text-pink-800">
+                                <strong>Tips Mengingat:</strong> Karena pakai "S" (Jamak), kolom angka (<span class="font-mono">average_range</span>) pindah ke <strong>DEPAN</strong>.
+                            </div>
+                            ${renderSpreadsheet()}
+                            ${renderChallenge(6, 
+                                'Hitung rata-rata penjualan (Kolom D) untuk <strong>"Laptop"</strong> di wilayah <strong>"Timur"</strong>.', 
+                                ['=averageifs(d2:d7;b2:b7;"laptop";c2:c7;"timur")', '=averageifs(d2:d7,b2:b7,"laptop",c2:c7,"timur")', '=averageifs(d2:d7;c2:c7;"timur";b2:b7;"laptop")'],
+                                'summary', 'Lihat Rangkuman'
+                            )}
+                        </div>
+                    `;
+
+                case 'summary':
+                    return `
+                        <div class="space-y-6 animate-fadeIn">
+                            <h2 class="text-2xl font-bold text-gray-800">Rangkuman Materi</h2>
+                            <p class="text-gray-600">Simpan panduan cepat ini agar kamu tidak lupa pola rumusnya.</p>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <div class="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                                    <h3 class="font-bold text-blue-800 mb-2 border-b border-blue-200 pb-2">Menghitung Data (COUNT)</h3>
+                                    <div class="space-y-3 text-sm">
+                                        <div>
+                                            <span class="font-bold block text-gray-700">COUNTIF (1 Syarat)</span>
+                                            <code class="text-blue-600">=COUNTIF(AreaSyarat; "Syarat")</code>
+                                        </div>
+                                        <div>
+                                            <span class="font-bold block text-gray-700">COUNTIFS (Banyak Syarat)</span>
+                                            <code class="text-blue-600">=COUNTIFS(Area1; "Syarat1"; Area2; "Syarat2")</code>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="bg-green-50 p-4 rounded-xl border border-green-200">
+                                    <h3 class="font-bold text-green-800 mb-2 border-b border-green-200 pb-2">Jumlah Nilai (SUM)</h3>
+                                    <div class="space-y-3 text-sm">
+                                        <div>
+                                            <span class="font-bold block text-gray-700">SUMIF (1 Syarat)</span>
+                                            <code class="text-green-600">=SUMIF(AreaSyarat; "Syarat"; AreaJumlah)</code>
+                                            <div class="text-xs text-gray-500 mt-1">*AreaJumlah ada di BELAKANG</div>
+                                        </div>
+                                        <div>
+                                            <span class="font-bold block text-gray-700">SUMIFS (Banyak Syarat)</span>
+                                            <code class="text-green-600">=SUMIFS(AreaJumlah; Area1; "Syarat1"; ...)</code>
+                                            <div class="text-xs text-red-500 mt-1 font-bold">*AreaJumlah ada di DEPAN</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-200">
+                                    <h3 class="font-bold text-indigo-800 mb-2 border-b border-indigo-200 pb-2">Rata-rata (AVERAGE)</h3>
+                                    <div class="space-y-3 text-sm">
+                                        <div>
+                                            <span class="font-bold block text-gray-700">AVERAGEIF (1 Syarat)</span>
+                                            <code class="text-indigo-600">=AVERAGEIF(AreaSyarat; "Syarat"; AreaAvg)</code>
+                                            <div class="text-xs text-gray-500 mt-1">*AreaAvg ada di BELAKANG</div>
+                                        </div>
+                                        <div>
+                                            <span class="font-bold block text-gray-700">AVERAGEIFS (Banyak Syarat)</span>
+                                            <code class="text-indigo-600">=AVERAGEIFS(AreaAvg; Area1; "Syarat1"; ...)</code>
+                                            <div class="text-xs text-red-500 mt-1 font-bold">*AreaAvg ada di DEPAN</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mt-8 text-center bg-gray-100 p-6 rounded-lg">
+                                <h3 class="text-xl font-bold text-gray-700 mb-2">Selamat! 🎉</h3>
+                                <p class="text-gray-600 mb-4">Kamu sudah memahami dasar logika 6 rumus penting ini.</p>
+                                <button 
+                                    onclick="app.handleTabChange('intro')"
+                                    class="px-6 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors"
+                                >
+                                    Ulangi Materi
+                                </button>
+                            </div>
+                        </div>
+                    `;
+
+                default: return '';
+            }
+        }
+
+        // --- MAIN RENDER ---
+
+        function renderApp() {
+            const appDiv = document.getElementById('app');
+            
+            // Build Sidebar
+            const navItems = modules.map(mod => `
+                <button
+                    onclick="app.handleTabChange('${mod.id}')"
+                    class="w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-all ${
+                        state.activeTab === mod.id 
+                        ? 'bg-blue-50 text-blue-700 font-bold shadow-sm' 
+                        : 'text-gray-600 hover:bg-gray-50'
+                    }"
+                >
+                    <i data-lucide="${mod.icon}" width="20" height="20"></i>
+                    ${mod.title}
+                </button>
+            `).join('');
+
+            const sidebarClass = `
+                fixed md:relative top-0 left-0 h-full w-64 bg-white border-r border-gray-200 shadow-lg md:shadow-none transform transition-transform duration-300 z-20
+                ${state.isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+            `;
+
+            const overlay = state.isSidebarOpen ? `
+                <div 
+                    class="fixed inset-0 bg-black bg-opacity-50 z-10 md:hidden"
+                    onclick="app.toggleSidebar()"
+                ></div>
+            ` : '';
+
+            appDiv.innerHTML = `
+                <!-- Mobile Header -->
+                <div class="md:hidden bg-white p-4 flex justify-between items-center shadow-sm z-10 w-full absolute top-0">
+                    <h1 class="font-bold text-blue-600">Jago Excel</h1>
+                    <button onclick="app.toggleSidebar()">
+                        <i data-lucide="menu" width="24" height="24"></i>
+                    </button>
+                </div>
+
+                <!-- Sidebar Navigation -->
+                <div class="${sidebarClass}">
+                    <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+                        <h1 class="text-xl font-extrabold text-blue-700 tracking-tight">Jago Excel 📊</h1>
+                        <button class="md:hidden" onclick="app.toggleSidebar()"><i data-lucide="chevron-left"></i></button>
+                    </div>
+                    <nav class="p-4 space-y-2">
+                        ${navItems}
+                    </nav>
+                </div>
+
+                <!-- Main Content Area -->
+                <div class="flex-1 p-4 md:p-8 overflow-y-auto h-screen mt-14 md:mt-0">
+                    <div class="max-w-3xl mx-auto bg-white min-h-[500px] rounded-2xl shadow-xl p-6 md:p-8 relative">
+                        ${renderContent()}
+                    </div>
+                    <div class="text-center mt-6 text-gray-400 text-xs">
+                        Jago Excel
+                    </div>
+                </div>
+
+                ${overlay}
+            `;
+
+            // Re-initialize icons after DOM update
+            lucide.createIcons();
+            
+            // Focus input if exists (primitive retention of focus)
+            const input = document.getElementById('formulaInput');
+            if (input && state.userFormula === input.value) {
+                const len = state.userFormula.length;
+                input.setSelectionRange(len, len);
+                input.focus();
+            }
+        }
+
+        // Initial Render
+        renderApp();
+
+    </script>
+</body>
+</html>
